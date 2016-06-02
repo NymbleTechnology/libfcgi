@@ -1,0 +1,14 @@
+Basic Directions
+----------------
+
+Unix:
+
+    ./configure
+    make
+    make install
+
+Win32:
+
+    nmake -f Makefile.nt
+
+    (or use the MSVC++ project files in the Win32 directory)

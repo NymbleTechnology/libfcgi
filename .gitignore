@@ -1,0 +1,8 @@
+Makefile
+*.o
+.deps/
+libtool
+autom4te.cache
+stamp-h1
+config.log
+config.status
