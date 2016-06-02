@@ -1,4 +1,4 @@
-/* fcgi_config.h.in.  Generated from configure.ac by autoheader.  */
+/* fcgi_config.h.in.  Generated from configure.in by autoheader.  */
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #undef HAVE_ARPA_INET_H
@@ -84,10 +84,6 @@
 /* Define if va_arg(arg, long double) crashes the compiler */
 #undef HAVE_VA_ARG_LONG_DOUBLE_BUG
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
-#undef LT_OBJDIR
-
 /* Name of package */
 #undef PACKAGE
 
@@ -102,9 +98,6 @@
 
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
-
-/* Define to the home page for this package. */
-#undef PACKAGE_URL
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION

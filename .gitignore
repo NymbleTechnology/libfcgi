@@ -1,8 +1,15 @@
 Makefile
 *.o
+*.lo
+*.la
 .deps/
+.libs/
 libtool
 autom4te.cache
 stamp-h1
 config.log
 config.status
+debugfiles.list
+debuglinks.list
+debugsources.list
+elfbins.list
