@@ -64,6 +64,10 @@ static const char rcsid[] = "$Id: os_unix.c,v 1.37 2002/03/05 19:14:49 robs Exp 
 #define INADDR_NONE ((unsigned long) -1)
 #endif
 
+#ifndef HAVE_SOCKLEN
+typedef unsigned int socklen_t;
+#endif
+
 /*
  * This structure holds an entry for each oustanding async I/O operation.
  */
@@ -298,8 +302,8 @@ union SockAddrUnion {
  */
 int OS_CreateLocalIpcFd(const char *bindPath, int backlog)
 {
-    int listenSock, servLen;
-    union   SockAddrUnion sa;  
+    int	    listenSock, servLen;
+    union   SockAddrUnion sa;
     int	    tcp = FALSE;
     unsigned long tcp_ia = 0;
     char    *tp;
@@ -307,76 +311,88 @@ int OS_CreateLocalIpcFd(const char *bindPath, int backlog)
     char    host[MAXPATHLEN];
 
     strcpy(host, bindPath);
-    if((tp = strchr(host, ':')) != 0) {
+    if ((tp = strchr(host, ':')) != 0) {
 	*tp++ = 0;
 	if((port = atoi(tp)) == 0) {
 	    *--tp = ':';
-	 } else {
+	} else {
 	    tcp = TRUE;
-	 }
-    }
-    if(tcp) {
-      if (!*host || !strcmp(host,"*")) {
-	tcp_ia = htonl(INADDR_ANY);
-      } else {
-	tcp_ia = inet_addr(host);
-	if (tcp_ia == INADDR_NONE) {
-	  struct hostent * hep;
-	  hep = gethostbyname(host);
-	  if ((!hep) || (hep->h_addrtype != AF_INET || !hep->h_addr_list[0])) {
-	    fprintf(stderr, "Cannot resolve host name %s -- exiting!\n", host);
-	    exit(1);
-	  }
-	  if (hep->h_addr_list[1]) {
-	    fprintf(stderr, "Host %s has multiple addresses ---\n", host);
-	    fprintf(stderr, "you must choose one explicitly!!!\n");
-	    exit(1);
-	  }
-	  tcp_ia = ((struct in_addr *) (hep->h_addr))->s_addr;
 	}
-      }
     }
 
-    if(tcp) {
-	listenSock = socket(AF_INET, SOCK_STREAM, 0);
-        if(listenSock >= 0) {
-            int flag = 1;
-            if(setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR,
-                          (char *) &flag, sizeof(flag)) < 0) {
-                fprintf(stderr, "Can't set SO_REUSEADDR.\n");
-	        exit(1001);
+    if (tcp)
+    {
+        if (!*host || !strcmp(host,"*"))
+        {
+	    tcp_ia = htonl(INADDR_ANY);
+        }
+        else
+        {
+            tcp_ia = inet_addr(host);
+	    if (tcp_ia == INADDR_NONE)
+            {
+	        struct hostent * hep;
+	        hep = gethostbyname(host);
+	        if ((!hep) || (hep->h_addrtype != AF_INET || !hep->h_addr_list[0]))
+                {
+	            fprintf(stderr, "Cannot resolve host name %s\n", host);
+	            return (-1);
+	        }
+	        if (hep->h_addr_list[1])
+                {
+	            fprintf(stderr, "Host %s has multiple addresses, not supported\n", host);
+	            return (-1);
+	        }
+	        tcp_ia = ((struct in_addr *) (hep->h_addr))->s_addr;
 	    }
-	}
-    } else {
-	listenSock = socket(AF_UNIX, SOCK_STREAM, 0);
-    }
-    if(listenSock < 0) {
-        return -1;
-    }
+        }
 
-    /*
-     * Bind the listening socket.
-     */
-    if(tcp) {
+        listenSock = socket(AF_INET, SOCK_STREAM, 0);
+
+        if (listenSock >= 0)
+        {
+            int flag = 1;
+            if (setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR,
+                           (char *) &flag, sizeof(flag)) < 0)
+            {
+                fprintf(stderr, "Can't set SO_REUSEADDR.\n");
+                close(listenSock);
+	        listenSock = -1;
+	    }
+        }
 	memset((char *) &sa.inetVariant, 0, sizeof(sa.inetVariant));
 	sa.inetVariant.sin_family = AF_INET;
 	sa.inetVariant.sin_addr.s_addr = tcp_ia;
 	sa.inetVariant.sin_port = htons(port);
 	servLen = sizeof(sa.inetVariant);
-    } else {
-	unlink(bindPath);
-	if(OS_BuildSockAddrUn(bindPath, &sa.unixVariant, &servLen)) {
-	    fprintf(stderr, "Listening socket's path name is too long.\n");
-	    exit(1000);
+    }
+    else /* unix socket */
+    {
+	listenSock = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (listenSock >= 0)
+        {
+            unlink(bindPath);
+	    if (OS_BuildSockAddrUn(bindPath, &sa.unixVariant, &servLen))
+            {
+	        fprintf(stderr, "Listening socket's path name is too long.\n");
+	        close(listenSock);
+	        listenSock = -1;
+            }
 	}
     }
-    if(bind(listenSock, (struct sockaddr *) &sa.unixVariant, servLen) < 0
-       || listen(listenSock, backlog) < 0) {
-	perror("bind/listen");
-        exit(errno);
-    }
 
-    return listenSock;
+    if (listenSock >= 0)
+    {
+        if (bind(listenSock, (struct sockaddr *) &sa.unixVariant, servLen) < 0) {
+            perror("bind");
+        } else if (listen(listenSock, backlog) < 0) {
+	    perror("listen");
+        } else {
+            return listenSock;
+        }
+        close(listenSock);
+    }
+    return (-1);
 }
 
 /*
@@ -422,7 +438,7 @@ int OS_FcgiConnect(char *bindPath)
 	struct	hostent	*hp;
 	if((hp = gethostbyname((*host ? host : "localhost"))) == NULL) {
 	    fprintf(stderr, "Unknown host: %s\n", bindPath);
-	    exit(1000);
+	    return (-1);
 	}
 	sa.inetVariant.sin_family = AF_INET;
 	memcpy(&sa.inetVariant.sin_addr, hp->h_addr, hp->h_length);
@@ -432,7 +448,7 @@ int OS_FcgiConnect(char *bindPath)
     } else {
 	if(OS_BuildSockAddrUn(bindPath, &sa.unixVariant, &servLen)) {
 	    fprintf(stderr, "Listening socket's path name is too long.\n");
-	    exit(1000);
+	    return (-1);
 	}
 	resultSock = socket(AF_UNIX, SOCK_STREAM, 0);
     }
@@ -609,12 +625,11 @@ static void GrowAsyncTable(void)
     asyncIoTableSize = asyncIoTableSize * 2;
     asyncIoTable = (AioInfo *)realloc(asyncIoTable, asyncIoTableSize * sizeof(AioInfo));
     if(asyncIoTable == NULL) {
-        errno = ENOMEM;
-        exit(errno);
+        perror("unable to grow async table");
+    } else {
+        memset((char *) &asyncIoTable[oldTableSize], 0,
+               oldTableSize * sizeof(AioInfo));
     }
-    memset((char *) &asyncIoTable[oldTableSize], 0,
-           oldTableSize * sizeof(AioInfo));
-
 }
 
 /*
@@ -857,7 +872,7 @@ int OS_DoIo(struct timeval *tmo)
         selectStatus = select((maxFd+1), &readFdSetCpy, &writeFdSetCpy,
                               NULL, tmo);
         if(selectStatus < 0) {
-            exit(errno);
+            perror("io select");
 	}
 
         for(fd = 0; fd <= maxFd; fd++) {
@@ -1164,11 +1179,7 @@ int OS_Accept(int listen_sock, int fail_on_intr, const char *webServerAddrs)
 
         for (;;) {
             do {
-#ifdef HAVE_SOCKLEN
                 socklen_t len = sizeof(sa);
-#else
-                int len = sizeof(sa);
-#endif
                 if (shutdownPending) break;
                 /* There's a window here */
 
@@ -1183,7 +1194,7 @@ int OS_Accept(int listen_sock, int fail_on_intr, const char *webServerAddrs)
                     int errnoSave = errno;
 
                     ReleaseLock(listen_sock);
-                    
+
                     if (! shutdownPending) {
                         errno = errnoSave;
                     }
@@ -1264,11 +1275,7 @@ int OS_IsFcgi(int sock)
         struct sockaddr_in in;
         struct sockaddr_un un;
     } sa;
-#ifdef HAVE_SOCKLEN
     socklen_t len = sizeof(sa);
-#else
-    int len = sizeof(sa);
-#endif
 
     errno = 0;
 
@@ -1293,10 +1300,10 @@ void OS_SetFlags(int fd, int flags)
 {
     int val;
     if((val = fcntl(fd, F_GETFL, 0)) < 0) {
-        exit(errno);
+        perror("get flags");
     }
     val |= flags;
     if(fcntl(fd, F_SETFL, val) < 0) {
-        exit(errno);
+        perror("set flags");
     }
 }
